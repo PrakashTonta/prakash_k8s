@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'maven3'
+    }
+
+    options {
+        skipDefaultCheckout(true)
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                cleanWs()
+                git branch: 'main',
+                    url: 'https://github.com/PrakashTonta/prakash_k8s.git'
+            }
+        }
+
+        stage('Build Artifact') {
+            steps {
+                echo 'Build Artifact'
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo 'Build Docker Image'
+                sh 'docker build -t raviprakashtonta/endtoend:${BUILD_NUMBER} .'
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([string(credentialsId: 'dockerhub', variable: 'dockerhub')]) {
+                    sh '''
+                        docker login -u raviprakashtonta -p ${dockerhub}
+                        docker push raviprakashtonta/endtoend:${BUILD_NUMBER}
+                    '''
+                }
+                echo 'Pushed to Docker Hub'
+            }
+        }
+
+        stage('Update Deployment File') {
+            environment {
+                GIT_REPO_NAME = "prakash_k8s"
+                GIT_USER_NAME = "PrakashTonta"
+            }
+
+            steps {
+                withCredentials([string(credentialsId: 'githubtoken', variable: 'githubtoken')]) {
+                    sh '''
+                        git config user.email "raviprakashtonta055@gmail.com"
+                        git config user.name "Ravi"
+
+                        sed -i "s/endtoend:.*/endtoend:${BUILD_NUMBER}/g" deploymentfiles/deployment.yaml
+
+                        git add deploymentfiles/deployment.yaml
+
+                        if ! git diff --cached --quiet; then
+                            git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+
+                            git remote set-url origin https://${githubtoken}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git
+
+                            git pull --rebase --autostash origin main
+                            git push origin main
+                        else
+                            echo "No changes detected. Skipping commit."
+                        fi
+                    '''
+                }
+            }
+        }
+    }
+}
