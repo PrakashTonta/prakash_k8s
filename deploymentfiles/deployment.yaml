@@ -23,6 +23,6 @@ spec:
     spec:
       containers:
         - name: fb-pod-cont
-          image: raviprakashtonta/endtoend:15
+          image: raviprakashtonta/endtoend:16
           ports:
             - containerPort: 8080
